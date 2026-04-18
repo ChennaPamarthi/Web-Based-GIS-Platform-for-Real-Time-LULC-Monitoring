@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LULC Web GIS</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body { font-family: Arial; margin: 0; }
+        h2 { background: #2c6aa0; color: white; padding: 10px; text-align:center; }
+        .container { display: flex; }
+        #map { height: 500px; width: 70%; }
+        .side { width: 30%; padding: 10px; }
+        button { padding: 8px; margin: 5px; }
+    </style>
+</head>
+
+<body>
+
+<h2>Web GIS for LULC Classification</h2>
+
+<div style="text-align:center;">
+    <input type="file" id="fileInput">
+    <button onclick="upload()">Upload</button>
+    <button onclick="toggleLayer()">Toggle LULC</button>
+    <button onclick="downloadImage()">Download</button>
+</div>
+
+<div class="container">
+
+    <div id="map"></div>
+
+    <div class="side">
+        <h3>Area Statistics</h3>
+        <canvas id="chart"></canvas>
+        <div id="stats"></div>
+
+        <h3>Legend</h3>
+        <p style="color:blue;">■ Water </p>
+        <p style="color:green;">■ Agriculture </p>
+        <p style="color:gray;">■ Urban </p>
+        <p style="color:yellow;">■ Barren </p>
+    </div>
+
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+let map = L.map('map').setView([13, 77], 10);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
+.addTo(map);
+
+let overlay;
+let visible = true;
+
+function upload() {
+    let file = document.getElementById("fileInput").files[0];
+
+    let formData = new FormData();
+    formData.append("file", file);
+
+    fetch("/upload", {
+        method: "POST",
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+
+        let imgUrl = "/output/result.png?t=" + Date.now();
+
+        if (overlay) map.removeLayer(overlay);
+
+        overlay = L.imageOverlay(imgUrl, data.bounds).addTo(map);
+        map.fitBounds(data.bounds);
+
+        let statsDiv = document.getElementById("stats");
+        statsDiv.innerHTML = "";
+
+        let labels = [];
+        let values = [];
+
+        for (let key in data.stats.area) {
+            statsDiv.innerHTML += `<p>${key}: ${data.stats.area[key]}%</p>`;
+            labels.push(key);
+            values.push(data.stats.area[key]);
+        }
+
+        statsDiv.innerHTML += `<h4>Accuracy: ${data.stats.accuracy}%</h4>`;
+
+        new Chart(document.getElementById("chart"), {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: [
+                        "blue",
+                        "green",
+                        "gray",
+                        "yellow"
+                    ]
+                }]
+            }
+        });
+
+    });
+}
+
+function toggleLayer() {
+    if (!overlay) return;
+
+    if (visible) {
+        map.removeLayer(overlay);
+        visible = false;
+    } else {
+        overlay.addTo(map);
+        visible = true;
+    }
+}
+
+function downloadImage() {
+    if (!overlay) {
+        alert("Upload image first!");
+        return;
+    }
+
+    let link = document.createElement('a');
+    link.href = "/output/result.png";
+    link.download = "LULC_Result.png";
+    link.click();
+}
+</script>
+
+</body>
+</html>
